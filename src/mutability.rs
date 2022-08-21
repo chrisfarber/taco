@@ -21,3 +21,15 @@ pub fn try_crazy_stuff() {
 
     println!("stuff? {:?}", stuff);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::largest_element_of;
+
+    #[test]
+    fn gets_the_largest() {
+        let mut nums = vec![17, 18, 20, 1, 32, 12, 19, 7];
+        let largest = largest_element_of(&mut nums);
+        assert_eq!(*largest.unwrap(), 32);
+    }
+}
