@@ -27,14 +27,6 @@ fn error_to_500<E>(result: Result<Response<Body>, E>) -> Result<Response<Body>, 
     }
 }
 
-// fn stuff() {
-//     let s1 = String::new();
-//     let mut s2 = s1;
-//     s2.push_str("hello!");
-//     println!("s2 {s2}");
-//     println!("s1 {s1}");
-// }
-
 async fn shutdown_signal() {
     // Wait for the CTRL+C signal
     tokio::signal::ctrl_c()
