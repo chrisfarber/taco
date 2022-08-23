@@ -3,9 +3,6 @@ use hyper::{Body, Request, Response, Server};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-mod mutability;
-mod parser;
-
 async fn answer(req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
     Response::builder()
         .status(200)
@@ -35,8 +32,6 @@ async fn shutdown_signal() {
 }
 #[tokio::main]
 async fn main() {
-    parser::stuff();
-    mutability::try_crazy_stuff();
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(echo_service)) });
 
