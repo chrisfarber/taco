@@ -1,17 +1,19 @@
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Method, Request, Response, Server};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-async fn answer(req: Request<Body>) -> Result<Response<Body>, hyper::http::Error> {
-    Response::builder()
-        .status(200)
-        .header("woah", "dude\r\n")
-        .body(req.into_body())
-}
+mod context;
+mod handler;
 
-async fn echo_service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    error_to_500(answer(req).await)
+async fn main_handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    let ctx = context::Context { state: 4 };
+    let handler1: Box<&dyn handler::Handler> = Box::new(&handler::hello);
+    let handler: Box<dyn handler::Handler> = match (req.method(), req.uri().path()) {
+        (&Method::GET, "/hello") => Box::new(handler::hello),
+        (_, _) => Box::new(handler::not_found),
+    };
+    return error_to_500(handler.invoke(&ctx, &req).await);
 }
 
 fn error_to_500<E>(result: Result<Response<Body>, E>) -> Result<Response<Body>, Infallible> {
@@ -33,7 +35,7 @@ async fn shutdown_signal() {
 #[tokio::main]
 async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(echo_service)) });
+    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(main_handler)) });
 
     let server = Server::bind(&addr).serve(make_svc);
     let graceful = server.with_graceful_shutdown(shutdown_signal());
