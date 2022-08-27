@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.57"
 hyper = {version = "0.14.20", features=["full"]}
+routerify = {version="3.0.0", features=["all"]}
 serde = "1.0.144"
 serde_json = "1.0.85"
 tokio = {version = "1.20.1", features=["full"]}
