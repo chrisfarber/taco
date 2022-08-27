@@ -1,6 +1,8 @@
+use axum::http::status::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::get;
-use axum::Router;
+use axum::routing::{get, post};
+use axum::{Json, Router, Server};
+use serde::{Deserialize, Serialize};
 
 use std::net::SocketAddr;
 
@@ -15,18 +17,30 @@ async fn shutdown_signal() {
 }
 
 async fn hello() -> impl IntoResponse {
-    (axum::http::status::StatusCode::OK, "Well this is easier.\n")
+    (StatusCode::OK, "Well this is easy.\n")
+}
+
+#[derive(Deserialize, Serialize)]
+struct Echo {
+    msg: String,
+}
+
+async fn json_echo(Json(data): Json<Echo>) -> Json<Echo> {
+    println!("echo received \"{}\"", data.msg);
+    Json(data)
 }
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new().route("/hello", get(hello));
-    // let service = ServiceBuilder::new().service_fn(app);
+    let app = Router::new()
+        .route("/hello", get(hello))
+        .route("/json-echo", post(json_echo))
+        .route("/kv/:key", get(hello));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
     println!("Starting up on http://{:?}", addr);
-    axum::Server::bind(&addr)
+    Server::bind(&addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
