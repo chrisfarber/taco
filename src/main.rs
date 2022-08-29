@@ -5,6 +5,9 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router, Server};
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -97,12 +100,23 @@ type StateRef = Arc<Mutex<State>>;
 async fn main() {
     let state_ref: StateRef = Arc::new(Mutex::new(State::new()));
 
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or("tower_http=trace".into()),
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     context::wat();
     let app = Router::new()
         .route("/hello", get(hello))
         .route("/json-echo", post(json_echo))
         .route("/kv/:key", get(get_key).post(set_key))
-        .layer(Extension(state_ref));
+        .layer(
+            ServiceBuilder::new()
+                .layer(Extension(state_ref))
+                .layer(TraceLayer::new_for_http()),
+        );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
