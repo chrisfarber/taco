@@ -1,6 +1,6 @@
 use axum::extract::Path;
 use axum::http::status::StatusCode;
-use axum::response::IntoResponse;
+
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router, Server};
 use serde::{Deserialize, Serialize};
@@ -24,13 +24,12 @@ async fn shutdown_signal() {
         .expect("failed to install CTRL+C signal handler");
 }
 
-async fn hello(state: Extension<StateRef>) -> impl IntoResponse {
-    if let Ok(mut state) = state.lock() {
-        state.ctr += 1;
-        (StatusCode::OK, format!("Hello #{}!\n", state.ctr))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "oh no.\n".into())
-    }
+async fn hello(state_ref: Extension<StateRef>) -> Result<String, StatusCode> {
+    let mut state = state_ref
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state.ctr += 1;
+    Ok(format!("Hello #{}!\n", state.ctr))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -102,12 +101,11 @@ async fn main() {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or("tower_http=trace".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "tower_http=trace".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    context::wat();
     let app = Router::new()
         .route("/hello", get(hello))
         .route("/json-echo", post(json_echo))
