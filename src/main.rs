@@ -4,6 +4,7 @@ use axum::http::status::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router, Server};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -11,11 +12,8 @@ use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
-
-mod context;
-mod handler;
 
 async fn shutdown_signal() {
     // Wait for the CTRL+C signal
@@ -25,9 +23,7 @@ async fn shutdown_signal() {
 }
 
 async fn hello(state_ref: Extension<StateRef>) -> Result<String, StatusCode> {
-    let mut state = state_ref
-        .lock()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut state = state_ref.write().await;
     state.ctr += 1;
     Ok(format!("Hello #{}!\n", state.ctr))
 }
@@ -35,12 +31,6 @@ async fn hello(state_ref: Extension<StateRef>) -> Result<String, StatusCode> {
 #[derive(Deserialize, Serialize)]
 struct Echo {
     msg: String,
-}
-
-#[derive(Deserialize, Serialize)]
-struct KeyPair {
-    key: String,
-    value: Option<String>,
 }
 
 async fn json_echo(Json(data): Json<Echo>) -> Json<Echo> {
@@ -55,10 +45,7 @@ async fn get_key(
 ) -> Result<String, StatusCode> {
     let value;
     {
-        let store = &state
-            .lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .store;
+        let store = &state.read().await.store;
         value = store.get(&key).ok_or(StatusCode::NOT_FOUND)?.clone()
     }
     Ok(value)
@@ -70,11 +57,7 @@ async fn set_key(
     state: Extension<StateRef>,
 ) -> Result<(), StatusCode> {
     {
-        state
-            .lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .store
-            .insert(key, body);
+        state.write().await.store.insert(key, body);
     }
     Ok(())
 }
@@ -93,11 +76,12 @@ impl State {
     }
 }
 
-type StateRef = Arc<Mutex<State>>;
+type StateRef = Arc<RwLock<State>>;
 
 #[tokio::main]
 async fn main() {
-    let state_ref: StateRef = Arc::new(Mutex::new(State::new()));
+    // let state_ref: StateRef = Arc::new(Mutex::new(State::new()));
+    let state_ref: StateRef = Arc::new(RwLock::new(State::new()));
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
