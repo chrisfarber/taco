@@ -1,4 +1,4 @@
-use sqlx::{sqlite, ConnectOptions, Error as SqlxError, Pool, Row, Sqlite};
+use sqlx::{sqlite, ConnectOptions, Error as SqlxError, Pool, Sqlite};
 use std::str::FromStr;
 
 pub struct DbOptions {
@@ -51,16 +51,34 @@ pub async fn open_pool(opts: &DbOptions) -> Result<Database, SqlxError> {
     })
 }
 
+#[derive(sqlx::FromRow)]
+struct KeyValuePair {
+    key: String,
+    value: String,
+}
+
 pub async fn get_key(db: &Database, key: String) -> Result<Option<String>, SqlxError> {
-    Ok(sqlx::query("SELECT key, value FROM kv_store WHERE key = ?")
-        .bind(key)
-        .fetch_optional(&db.pool)
-        .await?
-        // not ideal, as the unwrap_or will hide a programming error (a mismatched column name):
-        .map(|row| row.try_get("value").unwrap_or(None))
-        .flatten())
+    Ok(
+        sqlx::query_as("SELECT key, value FROM kv_store WHERE key = ?")
+            .bind(key)
+            .fetch_optional(&db.pool)
+            .await?
+            .map(|row: KeyValuePair| row.value),
+    )
 }
 
 pub async fn set_key(db: &Database, key: String, value: String) -> Result<(), SqlxError> {
-    Ok(())
+    sqlx::query(
+        "
+        INSERT INTO kv_store (key, value)
+        VALUES ($1, $2)
+        ON CONFLICT (key)
+        DO UPDATE SET value = $2
+    ",
+    )
+    .bind(key)
+    .bind(value)
+    .execute(&db.pool)
+    .await
+    .map(|_| ())
 }

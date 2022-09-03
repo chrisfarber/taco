@@ -10,7 +10,6 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,22 +53,20 @@ async fn get_key(
 async fn set_key(
     Path(key): Path<String>,
     body: String,
-    state: Extension<db::Database>,
+    db: Extension<db::Database>,
 ) -> Result<(), StatusCode> {
-    Ok(())
+    db::set_key(&db, key, body)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 struct State {
     pub ctr: i32,
-    pub store: HashMap<String, String>,
 }
 
 impl State {
     fn new() -> State {
-        State {
-            ctr: 0,
-            store: HashMap::new(),
-        }
+        State { ctr: 0 }
     }
 }
 
