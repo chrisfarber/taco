@@ -15,6 +15,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+mod db;
+
 async fn shutdown_signal() {
     // Wait for the CTRL+C signal
     tokio::signal::ctrl_c()
@@ -41,24 +43,19 @@ async fn json_echo(Json(data): Json<Echo>) -> Json<Echo> {
 
 async fn get_key(
     Path(key): Path<String>,
-    state: Extension<StateRef>,
+    state: Extension<db::Database>,
 ) -> Result<String, StatusCode> {
-    let value;
-    {
-        let store = &state.read().await.store;
-        value = store.get(&key).ok_or(StatusCode::NOT_FOUND)?.clone()
-    }
-    Ok(value)
+    db::get_key(&state, key)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn set_key(
     Path(key): Path<String>,
     body: String,
-    state: Extension<StateRef>,
+    state: Extension<db::Database>,
 ) -> Result<(), StatusCode> {
-    {
-        state.write().await.store.insert(key, body);
-    }
     Ok(())
 }
 
@@ -83,6 +80,15 @@ async fn main() {
     // let state_ref: StateRef = Arc::new(Mutex::new(State::new()));
     let state_ref: StateRef = Arc::new(RwLock::new(State::new()));
 
+    let db_opts = db::DbOptions::new("sqlite://db.sqlite");
+    db::init_db_if_needed(&db_opts)
+        .await
+        .expect("error initializing db");
+
+    let db = db::open_pool(&db_opts)
+        .await
+        .expect("Could not connect to sqlite db");
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "tower_http=trace".into()),
@@ -97,6 +103,7 @@ async fn main() {
         .layer(
             ServiceBuilder::new()
                 .layer(Extension(state_ref))
+                .layer(Extension(db))
                 .layer(TraceLayer::new_for_http()),
         );
 
